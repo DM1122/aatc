@@ -45,10 +45,13 @@ if __name__ == "__main__":
                 if event.key == pygame.K_F1:
                     GE.UI_draw_plane_keepout = not GE.UI_draw_plane_keepout
                     LOG.info(f"UI plane keepout: {GE.UI_draw_plane_keepout}")
+                    GE.play_audio(GE.user_interact_audio)
                 elif event.key == pygame.K_F2:
                     LOG.info(ATC)
+                    GE.play_audio(GE.user_interact_audio)
                 elif event.key == pygame.K_F3:
                     LOG.debug(f"Event queue: {event_queue}")
+                    GE.play_audio(GE.user_interact_audio)
 
             elif event.type == GE.events["CONNECTIONREQUEST"]:
                 ATC.receive_connection(event.plane_id)

@@ -6,6 +6,7 @@ import math
 import numpy as np
 import pygame
 from pygame.math import Vector2
+from pathlib import Path
 
 LOG = logging.getLogger(__name__)
 
@@ -18,6 +19,14 @@ class GameEngine:
         self.screen_color = (0, 0, 0)
         self.screen_scale = 25  # pixels per km
         self.screen_size = Vector2(screen_size)
+
+        # assets
+        self.audio_volume = 0.1
+        self.assets_audio_path = Path("aatc/assets/audio")
+        self.user_interact_audio = Path("user_interact.wav")
+        self.plane_spawn_audio = Path("plane_spawn.wav")
+        self.plane_land_audio = Path("plane_land.wav")
+        self.plane_crash_audio = Path("plane_crash.wav")
 
         # UI
         self.UI_draw_plane_keepout = False
@@ -79,6 +88,8 @@ class GameEngine:
                 channels=self.events,
             )
         )
+        
+        self.play_audio(self.plane_spawn_audio)
 
     def vector_to_screen(self, vector):
         """Transforms a vector in game coordinates to screen coordinates.
@@ -94,6 +105,11 @@ class GameEngine:
         v_screen = self.origin - v
 
         return v_screen
+
+    def play_audio(self, audio):
+        sound = pygame.mixer.Sound(str(self.assets_audio_path/audio))
+        sound.set_volume(self.audio_volume)
+        sound.play()
 
     def update(self):
         time = pygame.time.get_ticks()
@@ -192,6 +208,12 @@ class Plane:
 
     def receive_flight_plan(self, plan):
         return
+
+    def navigate(self, position):
+        self.heading = math.atan2(position.y, position.x)
+
+    def hold(self, target):
+        target_vector = position 
 
     def update(self):
         time = pygame.time.get_ticks()

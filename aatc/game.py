@@ -26,12 +26,22 @@ class GameEngine:
         self.origin = self.screen_size // 2
 
         # planes
-        self.plane_spawn_rate = 15  # avg sec per plane
+        self.spawn_planes = True
+        self.spawn_planes_interval = 0
+        self.spawn_planes_interval_avg = 15  # avg sec per plane
+        self.spawn_planes_interval_max = 30  # sec
+        self.spawn_planes_interval_min = 1  # sec
+        self.spawn_planes_time_prev = 0  # msec
+
         # endregion
 
-        # region events
-        self.SPAWNPLANEEVENT = pygame.USEREVENT + 1
-        # endregion
+        # events
+        self.events = {
+            "CONNECTIONREQUEST": pygame.event.custom_type(),
+            "CONNECTIONCONFIRMATION": pygame.event.custom_type(),
+            "TELEMETRY": pygame.event.custom_type(),
+            "FLIGHTPLAN": pygame.event.custom_type(),
+        }
 
         # region setup
         self.RNG = np.random.default_rng()
@@ -60,20 +70,15 @@ class GameEngine:
             Vector2(math.cos(spawn_angle), math.sin(spawn_angle)) * self.atc_zone.radius
         )
         spawn_heading = math.atan2(-1 * spawn_position.y, -1 * spawn_position.x)
-        self.planes.append(Plane(id=id, position=spawn_position, heading=spawn_heading))
-
         LOG.info(f"Spawning plane '{id}' at {spawn_position}")
-
-    def start_plane_spawn_timer(self):
-        spawn_interval = round(
-            np.clip(
-                a=self.RNG.normal(loc=self.plane_spawn_rate, scale=2.0),
-                a_min=1,
-                a_max=30,
+        self.planes.append(
+            Plane(
+                id=id,
+                position=spawn_position,
+                heading=spawn_heading,
+                channels=self.events,
             )
         )
-        pygame.time.set_timer(event=self.SPAWNPLANEEVENT, millis=spawn_interval * 1000)
-        LOG.info(f"Spawning next plane in {spawn_interval}s")
 
     def vector_to_screen(self, vector):
         """Transforms a vector in game coordinates to screen coordinates.
@@ -91,10 +96,26 @@ class GameEngine:
         return v_screen
 
     def update(self):
-        # physics update
+        time = pygame.time.get_ticks()
+        if (
+            self.spawn_planes == True
+            and time >= self.spawn_planes_time_prev + self.spawn_planes_interval * 1000
+        ):
+            self.spawn_plane()
+            self.spawn_planes_time_prev = time
+
+            self.spawn_planes_interval = round(
+                np.clip(
+                    a=self.RNG.normal(loc=self.spawn_planes_interval_avg, scale=2.0),
+                    a_min=self.spawn_planes_interval_min,
+                    a_max=self.spawn_planes_interval_max,
+                )
+            )
+            LOG.debug(f"Spawning next plane in {self.spawn_planes_interval}s")
 
         for plane in self.planes:
             plane.position += plane.get_velocity() * (self.clock.get_time() * 10 ** -3)
+            plane.update()
 
         pass
 
@@ -127,7 +148,7 @@ class GameEngine:
 
 
 class Plane:
-    def __init__(self, id, position, heading):
+    def __init__(self, id, position, heading, channels):
         self.id = id
         self.color = (0, 255, 0)
         self.position = Vector2(position)
@@ -135,14 +156,51 @@ class Plane:
         self.heading = (
             heading  # radians. zero is due north, positive angles counterclockwise.
         )
+        self.status = "?"
+        self.channels = channels
+        self.transmit_frequency = 1  # Hz
+
+        self.transmit = False
 
         self.shape = [Vector2(-0.1, 0), Vector2(0, 0.2), Vector2(0.1, 0)]
+        self.transmit_time_prev = 0
+
+        self.request_connection()
 
     def __str__(self):
         return f"Plane '{self.id}'\n\tPos: {self.position}\n\tHead: {self.heading}rad\n\tVel: {self.get_velocity()}"
 
     def get_velocity(self):
         return Vector2(math.cos(self.heading), math.sin(self.heading)) * self.speed
+
+    def request_connection(self):
+        LOG.info(f"Plane '{self.id}' requesting connection with ATC.")
+        event_connection = pygame.event.Event(
+            self.channels["CONNECTIONREQUEST"], plane_id=self.id
+        )
+        pygame.event.post(event_connection)
+
+    def transmit_telemetry(self):
+        transmit_event = pygame.event.Event(
+            self.channels["TELEMETRY"],
+            plane_id=self.id,
+            telemetry={"position": self.position},
+        )
+        LOG.debug(f"Plane '{self.id}' transmitting telemetry: {transmit_event}.")
+
+        pygame.event.post(transmit_event)
+
+    def receive_flight_plan(self, plan):
+        return
+
+    def update(self):
+        time = pygame.time.get_ticks()
+        if (
+            self.transmit
+            and time >= self.transmit_time_prev + (1 / self.transmit_frequency) * 1000
+        ):
+            self.transmit_telemetry()
+            self.transmit_time_prev = time
 
     def draw(self, surface, position_screen, scale):
         shape_oriented = [
@@ -153,9 +211,14 @@ class Plane:
             surface=surface,
             color=self.color,
             points=((np.array(shape_oriented) + self.position) * scale)
-            + position_screen,
+            + position_screen,  # TODO: fix incorrecy y-axis rendering
             width=1,
         )
+
+
+# pygame.time.set_timer(
+#     event=event_transmission, millis=round(1 / self.transmit_frequency * 1000)
+# )
 
 
 class ATCZone:

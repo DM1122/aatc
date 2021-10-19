@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 # external
+import controller
 import game
 import pygame
 
@@ -31,24 +32,35 @@ LOG = logging.getLogger(__name__)
 
 if __name__ == "__main__":
     GE = game.GameEngine()
-
-    GE.spawn_plane()
-    GE.start_plane_spawn_timer()
+    ATC = controller.AATC(channels=GE.events)
 
     while True:
-        for event in pygame.event.get():
+        event_queue = pygame.event.get()
+        for event in event_queue:
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
 
-            if event.type == pygame.KEYDOWN:
+            elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_F1:
                     GE.UI_draw_plane_keepout = not GE.UI_draw_plane_keepout
                     LOG.info(f"UI plane keepout: {GE.UI_draw_plane_keepout}")
+                elif event.key == pygame.K_F2:
+                    LOG.info(ATC)
+                elif event.key == pygame.K_F3:
+                    LOG.debug(f"Event queue: {event_queue}")
 
-            if event.type == GE.SPAWNPLANEEVENT:
-                GE.spawn_plane()
-                GE.start_plane_spawn_timer()
+            elif event.type == GE.events["CONNECTIONREQUEST"]:
+                ATC.receive_connection(event.plane_id)
+
+            elif event.type == GE.events["CONNECTIONCONFIRMATION"]:
+                GE.planes[event.plane_id].transmit = True
+
+            elif event.type == GE.events["TELEMETRY"]:
+                ATC.update_telemetry(event.plane_id, event.telemetry)
+
+            elif event.type == GE.events["FLIGHTPLAN"]:
+                pass
 
         # draw scene
         GE.update()

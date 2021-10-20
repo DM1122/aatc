@@ -11,7 +11,6 @@ import pygame
 # paths
 log_path = Path("logs/main")
 
-
 # region logging
 log_path.mkdir(parents=True, exist_ok=True)
 handler_file = logging.FileHandler(
@@ -20,7 +19,7 @@ handler_file = logging.FileHandler(
 handler_stdout = logging.StreamHandler(sys.stdout)
 
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)",
     datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[handler_file, handler_stdout],
@@ -43,14 +42,20 @@ if __name__ == "__main__":
 
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_F1:
-                    GE.UI_draw_plane_keepout = not GE.UI_draw_plane_keepout
-                    LOG.info(f"UI plane keepout: {GE.UI_draw_plane_keepout}")
+                    GE.draw_plane_protected_radius = not GE.draw_plane_protected_radius
+                    LOG.info(
+                        f"UI plane protected radius: {GE.draw_plane_protected_radius}"
+                    )
                     GE.play_audio(GE.user_interact_audio)
                 elif event.key == pygame.K_F2:
                     LOG.info(ATC)
                     GE.play_audio(GE.user_interact_audio)
                 elif event.key == pygame.K_F3:
                     LOG.debug(f"Event queue: {event_queue}")
+                    GE.play_audio(GE.user_interact_audio)
+                elif event.key == pygame.K_F4:
+                    GE.paused = not GE.paused
+                    LOG.info(f"Simulation paused: {GE.paused}")
                     GE.play_audio(GE.user_interact_audio)
 
             elif event.type == GE.events["CONNECTIONREQUEST"]:
@@ -65,6 +70,5 @@ if __name__ == "__main__":
             elif event.type == GE.events["FLIGHTPLAN"]:
                 pass
 
-        # draw scene
-        GE.update()
+        GE.update() if not GE.paused else None
         GE.draw()

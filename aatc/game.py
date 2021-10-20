@@ -1,12 +1,12 @@
 # stdlib
 import logging
 import math
+from pathlib import Path
 
 # external
 import numpy as np
 import pygame
 from pygame.math import Vector2
-from pathlib import Path
 
 LOG = logging.getLogger(__name__)
 
@@ -19,6 +19,7 @@ class GameEngine:
         self.screen_color = (0, 0, 0)
         self.screen_scale = 25  # pixels per km
         self.screen_size = Vector2(screen_size)
+        self.paused = False
 
         # assets
         self.audio_volume = 0.1
@@ -28,8 +29,10 @@ class GameEngine:
         self.plane_land_audio = Path("plane_land.wav")
         self.plane_crash_audio = Path("plane_crash.wav")
 
+        self.plane_protected_radius = 0.1  # km
+
         # UI
-        self.UI_draw_plane_keepout = False
+        self.draw_plane_protected_radius = False
 
         # world
         self.origin = self.screen_size // 2
@@ -37,7 +40,7 @@ class GameEngine:
         # planes
         self.spawn_planes = True
         self.spawn_planes_interval = 0
-        self.spawn_planes_interval_avg = 15  # avg sec per plane
+        self.spawn_planes_interval_avg = 5  # avg sec per plane
         self.spawn_planes_interval_max = 30  # sec
         self.spawn_planes_interval_min = 1  # sec
         self.spawn_planes_time_prev = 0  # msec
@@ -78,8 +81,12 @@ class GameEngine:
         spawn_position = (
             Vector2(math.cos(spawn_angle), math.sin(spawn_angle)) * self.atc_zone.radius
         )
-        spawn_heading = math.atan2(-1 * spawn_position.y, -1 * spawn_position.x)
-        LOG.info(f"Spawning plane '{id}' at {spawn_position}")
+        spawn_heading = math.degrees(
+            math.pi - math.atan2(spawn_position.x, spawn_position.y)
+        )
+        LOG.info(
+            f"Spawning plane '{id}' at {spawn_position} with heading {round(spawn_heading)}°"
+        )
         self.planes.append(
             Plane(
                 id=id,
@@ -88,7 +95,7 @@ class GameEngine:
                 channels=self.events,
             )
         )
-        
+
         self.play_audio(self.plane_spawn_audio)
 
     def vector_to_screen(self, vector):
@@ -101,13 +108,13 @@ class GameEngine:
             pygame.math.Vector2D: The vector represented in screen coordinates.
         """
         v = Vector2(vector) if type(vector) is not Vector2 else vector
-        v = Vector2(v.x * -1, v.y)
+        v = Vector2(v.x * -1, v.y) * self.screen_scale
         v_screen = self.origin - v
 
         return v_screen
 
     def play_audio(self, audio):
-        sound = pygame.mixer.Sound(str(self.assets_audio_path/audio))
+        sound = pygame.mixer.Sound(str(self.assets_audio_path / audio))
         sound.set_volume(self.audio_volume)
         sound.play()
 
@@ -130,6 +137,7 @@ class GameEngine:
             LOG.debug(f"Spawning next plane in {self.spawn_planes_interval}s")
 
         for plane in self.planes:
+            LOG.info(f"vel: {plane.get_velocity()}")
             plane.position += plane.get_velocity() * (self.clock.get_time() * 10 ** -3)
             plane.update()
 
@@ -147,10 +155,19 @@ class GameEngine:
         for plane in self.planes:
             plane.draw(
                 surface=self.screen,
-                position_screen=self.vector_to_screen(plane.position),
+                position=self.vector_to_screen(plane.position),
                 scale=self.screen_scale,
             )
-            # LOG.info(f"Plane screen pos: {self.vector_to_screen(plane.position)}")
+            if self.draw_plane_protected_radius:
+                LOG.debug(f"plane pos: {plane.position}")
+                LOG.debug(f"screen pos {self.vector_to_screen(plane.position)}")
+                pygame.draw.circle(
+                    surface=self.screen,
+                    color=(0, 0, 255),
+                    center=self.vector_to_screen(plane.position),
+                    radius=self.plane_protected_radius * self.screen_scale,
+                    width=1,
+                )
 
         for strip in self.strips:
             strip.draw(
@@ -170,7 +187,7 @@ class Plane:
         self.position = Vector2(position)
         self.speed = 0.140  # km/s
         self.heading = (
-            heading  # radians. zero is due north, positive angles counterclockwise.
+            heading  # degrees. zero is due north, positive angles counterclockwise.
         )
         self.status = "?"
         self.channels = channels
@@ -178,7 +195,7 @@ class Plane:
 
         self.transmit = False
 
-        self.shape = [Vector2(-0.1, 0), Vector2(0, 0.2), Vector2(0.1, 0)]
+        self.shape = [Vector2(-0.1, 0) * 5, Vector2(0, 0.2) * 5, Vector2(0.1, 0) * 5]
         self.transmit_time_prev = 0
 
         self.request_connection()
@@ -187,7 +204,13 @@ class Plane:
         return f"Plane '{self.id}'\n\tPos: {self.position}\n\tHead: {self.heading}rad\n\tVel: {self.get_velocity()}"
 
     def get_velocity(self):
-        return Vector2(math.cos(self.heading), math.sin(self.heading)) * self.speed
+        return (
+            Vector2(
+                -1 * math.sin(math.radians(self.heading)),
+                math.cos(math.radians(self.heading)),
+            )
+            * self.speed
+        )
 
     def request_connection(self):
         LOG.info(f"Plane '{self.id}' requesting connection with ATC.")
@@ -213,7 +236,7 @@ class Plane:
         self.heading = math.atan2(position.y, position.x)
 
     def hold(self, target):
-        target_vector = position 
+        target_vector = position
 
     def update(self):
         time = pygame.time.get_ticks()
@@ -224,16 +247,17 @@ class Plane:
             self.transmit_telemetry()
             self.transmit_time_prev = time
 
-    def draw(self, surface, position_screen, scale):
-        shape_oriented = [
-            vertex.rotate(math.degrees(self.heading) - 90) for vertex in self.shape
-        ]
+    def draw(self, surface, position, scale):
+        shape_oriented = np.array(
+            [point.rotate(-1 * self.heading + 180) for point in self.shape]
+        )
+        shape_scaled = shape_oriented * scale
+        shape_translated = shape_scaled + position
 
         pygame.draw.polygon(
             surface=surface,
             color=self.color,
-            points=((np.array(shape_oriented) + self.position) * scale)
-            + position_screen,  # TODO: fix incorrecy y-axis rendering
+            points=shape_translated,
             width=1,
         )
 
@@ -265,7 +289,7 @@ class Strip:
         self.end_coord = end_coord
         self.color = (0, 255, 0)
 
-    def draw(self, surface, translate_func, scale):
+    def draw(self, surface, position, scale):
         pygame.draw.line(
             surface=surface,
             color=self.color,
@@ -273,3 +297,27 @@ class Strip:
             end_pos=translate_func(self.end_coord * scale),
             width=1,
         )
+
+
+# class Ray:
+#     def __init__(self, origin, direction, distance, resolution):
+#         self.origin = origin
+#         self.direction = direction
+#         self.distance = distance
+#         self.resolution = resolution
+
+#     def cast(self):
+#         # returns true if a plane is in the line of sight of the ray.
+#         # note that this is not a straight line of sight.
+
+
+#     def dsttocircle(p, c, radius):
+#         return length(c-p) - radius
+
+#     def dsttobox(p ,c, size):
+#         offset = abs(p-c)-size
+#         # distance from point outside box to edge (0 if inside box)
+#         unsiqgneddst = length(max(offset, 0))
+#         # distance from point inside box to edge (0 if outside box)
+#         dstInsidebbox = max(min(offset,0))
+#         return unsiqgneddst + dstInsidebbox

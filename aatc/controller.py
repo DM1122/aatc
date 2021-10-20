@@ -33,7 +33,7 @@ class AATC:
         self.database[plane_id]["position"] = telemetry["position"]
 
     def construct_flight_plan(self):
-        return 
+        return
 
     def send_flight_plan(plane_id, plan):
         return

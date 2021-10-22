@@ -1,11 +1,15 @@
 # stdlib
 import logging
 import math
+import random
+import string
 from pathlib import Path
 
 # external
+import controller
 import numpy as np
 import pygame
+from game_objects import ATCZone, Plane, Runway
 from pygame.math import Vector2
 
 LOG = logging.getLogger(__name__)
@@ -32,7 +36,7 @@ class GameEngine:
         self.plane_protected_radius = 0.1  # km
 
         # UI
-        self.draw_plane_protected_radius = False
+        self.draw_gizmos = True
 
         # world
         self.origin = self.screen_size // 2
@@ -40,7 +44,7 @@ class GameEngine:
         # planes
         self.spawn_planes = True
         self.spawn_planes_interval = 0
-        self.spawn_planes_interval_avg = 5  # avg sec per plane
+        self.spawn_planes_interval_avg = 15  # avg sec per plane
         self.spawn_planes_interval_max = 30  # sec
         self.spawn_planes_interval_min = 1  # sec
         self.spawn_planes_time_prev = 0  # msec
@@ -53,6 +57,7 @@ class GameEngine:
             "CONNECTIONCONFIRMATION": pygame.event.custom_type(),
             "TELEMETRY": pygame.event.custom_type(),
             "FLIGHTPLAN": pygame.event.custom_type(),
+            "HOLD": pygame.event.custom_type(),
         }
 
         # region setup
@@ -63,20 +68,23 @@ class GameEngine:
         self.screen = pygame.display.set_mode(self.screen_size)
         pygame.display.set_caption("AATC - David Maranto 2021")
 
-        # instantiating game objects
-        self.atc_zone = ATCZone()
-
         self.planes = []
 
-        self.strips = [
-            Strip(id=0, start_coord=Vector2(-0.5, -0.5), end_coord=Vector2(-0.5, 0.5)),
-            Strip(id=1, start_coord=Vector2(0.5, -0.5), end_coord=Vector2(0.5, 0.5)),
+        self.runways = [
+            Runway(
+                id=0, entry_coord=Vector2(-0.5, -0.5), exit_coord=Vector2(-0.5, 0.5)
+            ),
+            Runway(id=1, entry_coord=Vector2(0.5, -0.5), exit_coord=Vector2(0.5, 0.5)),
         ]
+
+        # instantiating game objects
+        self.atc_zone = ATCZone()
+        self.atc = controller.AATC(channels=self.events, runways=self.runways)
 
         # endregion
 
     def spawn_plane(self):
-        id = len(self.planes)
+        id = self.generate_id()
         spawn_angle = self.RNG.random(1) * 2 * math.pi  # random angle in radians
         spawn_position = (
             Vector2(math.cos(spawn_angle), math.sin(spawn_angle)) * self.atc_zone.radius
@@ -120,6 +128,8 @@ class GameEngine:
 
     def update(self):
         time = pygame.time.get_ticks()
+
+        # spawn plane
         if (
             self.spawn_planes == True
             and time >= self.spawn_planes_time_prev + self.spawn_planes_interval * 1000
@@ -137,11 +147,14 @@ class GameEngine:
             LOG.debug(f"Spawning next plane in {self.spawn_planes_interval}s")
 
         for plane in self.planes:
-            LOG.info(f"vel: {plane.get_velocity()}")
             plane.position += plane.get_velocity() * (self.clock.get_time() * 10 ** -3)
             plane.update()
 
-        pass
+        # self.atc.update()
+
+    @staticmethod
+    def generate_id(size=6, chars=string.ascii_uppercase + string.digits):
+        return "".join(random.choice(chars) for _ in range(size))
 
     def draw(self):
         self.screen.fill(self.screen_color)
@@ -158,7 +171,7 @@ class GameEngine:
                 position=self.vector_to_screen(plane.position),
                 scale=self.screen_scale,
             )
-            if self.draw_plane_protected_radius:
+            if self.draw_gizmos:
                 LOG.debug(f"plane pos: {plane.position}")
                 LOG.debug(f"screen pos {self.vector_to_screen(plane.position)}")
                 pygame.draw.circle(
@@ -169,155 +182,24 @@ class GameEngine:
                     width=1,
                 )
 
-        for strip in self.strips:
-            strip.draw(
+        for runway in self.runways:
+            runway.draw(
                 surface=self.screen,
-                translate_func=self.vector_to_screen,
-                scale=self.screen_scale,
+                position_start=self.vector_to_screen(runway.entry_coord),
+                position_end=self.vector_to_screen(runway.exit_coord),
             )
+
+        if self.draw_gizmos:
+            # draw path gizmos
+            for path in self.atc.paths:
+                waypoints_tranformed = [
+                    self.vector_to_screen(waypoint) for waypoint in path.waypoints
+                ]
+                path.draw(
+                    surface=self.screen,
+                    waypoints_tranformed=waypoints_tranformed,
+                    scale=self.screen_scale,
+                )
 
         pygame.display.flip()
         self.clock.tick(self.screen_fps)
-
-
-class Plane:
-    def __init__(self, id, position, heading, channels):
-        self.id = id
-        self.color = (0, 255, 0)
-        self.position = Vector2(position)
-        self.speed = 0.140  # km/s
-        self.heading = (
-            heading  # degrees. zero is due north, positive angles counterclockwise.
-        )
-        self.status = "?"
-        self.channels = channels
-        self.transmit_frequency = 1  # Hz
-
-        self.transmit = False
-
-        self.shape = [Vector2(-0.1, 0) * 5, Vector2(0, 0.2) * 5, Vector2(0.1, 0) * 5]
-        self.transmit_time_prev = 0
-
-        self.request_connection()
-
-    def __str__(self):
-        return f"Plane '{self.id}'\n\tPos: {self.position}\n\tHead: {self.heading}rad\n\tVel: {self.get_velocity()}"
-
-    def get_velocity(self):
-        return (
-            Vector2(
-                -1 * math.sin(math.radians(self.heading)),
-                math.cos(math.radians(self.heading)),
-            )
-            * self.speed
-        )
-
-    def request_connection(self):
-        LOG.info(f"Plane '{self.id}' requesting connection with ATC.")
-        event_connection = pygame.event.Event(
-            self.channels["CONNECTIONREQUEST"], plane_id=self.id
-        )
-        pygame.event.post(event_connection)
-
-    def transmit_telemetry(self):
-        transmit_event = pygame.event.Event(
-            self.channels["TELEMETRY"],
-            plane_id=self.id,
-            telemetry={"position": self.position},
-        )
-        LOG.debug(f"Plane '{self.id}' transmitting telemetry: {transmit_event}.")
-
-        pygame.event.post(transmit_event)
-
-    def receive_flight_plan(self, plan):
-        return
-
-    def navigate(self, position):
-        self.heading = math.atan2(position.y, position.x)
-
-    def hold(self, target):
-        target_vector = position
-
-    def update(self):
-        time = pygame.time.get_ticks()
-        if (
-            self.transmit
-            and time >= self.transmit_time_prev + (1 / self.transmit_frequency) * 1000
-        ):
-            self.transmit_telemetry()
-            self.transmit_time_prev = time
-
-    def draw(self, surface, position, scale):
-        shape_oriented = np.array(
-            [point.rotate(-1 * self.heading + 180) for point in self.shape]
-        )
-        shape_scaled = shape_oriented * scale
-        shape_translated = shape_scaled + position
-
-        pygame.draw.polygon(
-            surface=surface,
-            color=self.color,
-            points=shape_translated,
-            width=1,
-        )
-
-
-# pygame.time.set_timer(
-#     event=event_transmission, millis=round(1 / self.transmit_frequency * 1000)
-# )
-
-
-class ATCZone:
-    def __init__(self):
-        self.color = (0, 255, 0)
-        self.radius = 10
-
-    def draw(self, surface, position, scale):
-        pygame.draw.circle(
-            surface=surface,
-            color=self.color,
-            center=position,
-            radius=10 * scale,
-            width=1,
-        )
-
-
-class Strip:
-    def __init__(self, id, start_coord, end_coord):
-        self.id = id
-        self.start_coord = start_coord
-        self.end_coord = end_coord
-        self.color = (0, 255, 0)
-
-    def draw(self, surface, position, scale):
-        pygame.draw.line(
-            surface=surface,
-            color=self.color,
-            start_pos=translate_func(self.start_coord * scale),
-            end_pos=translate_func(self.end_coord * scale),
-            width=1,
-        )
-
-
-# class Ray:
-#     def __init__(self, origin, direction, distance, resolution):
-#         self.origin = origin
-#         self.direction = direction
-#         self.distance = distance
-#         self.resolution = resolution
-
-#     def cast(self):
-#         # returns true if a plane is in the line of sight of the ray.
-#         # note that this is not a straight line of sight.
-
-
-#     def dsttocircle(p, c, radius):
-#         return length(c-p) - radius
-
-#     def dsttobox(p ,c, size):
-#         offset = abs(p-c)-size
-#         # distance from point outside box to edge (0 if inside box)
-#         unsiqgneddst = length(max(offset, 0))
-#         # distance from point inside box to edge (0 if outside box)
-#         dstInsidebbox = max(min(offset,0))
-#         return unsiqgneddst + dstInsidebbox

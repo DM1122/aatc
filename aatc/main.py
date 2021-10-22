@@ -4,7 +4,6 @@ import sys
 from pathlib import Path
 
 # external
-import controller
 import game
 import pygame
 
@@ -31,7 +30,6 @@ LOG = logging.getLogger(__name__)
 
 if __name__ == "__main__":
     GE = game.GameEngine()
-    ATC = controller.AATC(channels=GE.events)
 
     while True:
         event_queue = pygame.event.get()
@@ -41,34 +39,51 @@ if __name__ == "__main__":
                 sys.exit()
 
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_F1:
-                    GE.draw_plane_protected_radius = not GE.draw_plane_protected_radius
-                    LOG.info(
-                        f"UI plane protected radius: {GE.draw_plane_protected_radius}"
-                    )
+                if event.key == pygame.K_F1:  # print ATC state
+                    LOG.info(GE.atc)
                     GE.play_audio(GE.user_interact_audio)
-                elif event.key == pygame.K_F2:
-                    LOG.info(ATC)
-                    GE.play_audio(GE.user_interact_audio)
-                elif event.key == pygame.K_F3:
-                    LOG.debug(f"Event queue: {event_queue}")
-                    GE.play_audio(GE.user_interact_audio)
-                elif event.key == pygame.K_F4:
+
+                elif event.key == pygame.K_F2:  # pause simulation
                     GE.paused = not GE.paused
                     LOG.info(f"Simulation paused: {GE.paused}")
                     GE.play_audio(GE.user_interact_audio)
 
+                elif event.key == pygame.K_F3:  # toggle gizmos
+                    GE.draw_gizmos = not GE.draw_gizmos
+                    LOG.info(f"Drawing gizmos: {GE.draw_gizmos}")
+                    GE.play_audio(GE.user_interact_audio)
+
+                elif event.key == pygame.K_F4:  # print pygame event queue
+                    LOG.debug(f"Event queue: {event_queue}")
+                    GE.play_audio(GE.user_interact_audio)
+
+                elif event.key == pygame.K_F12:  # debug function
+                    id = GE.atc.queue[0]
+                    runway_id = GE.atc.get_nearest_open_runway_to_plane(id)
+                    LOG.info(f"Nearest open runway: {runway_id}")
+                    GE.play_audio(GE.user_interact_audio)
+
             elif event.type == GE.events["CONNECTIONREQUEST"]:
-                ATC.receive_connection(event.plane_id)
+                GE.atc.add_plane(event.plane_id)
 
             elif event.type == GE.events["CONNECTIONCONFIRMATION"]:
-                GE.planes[event.plane_id].transmit = True
+                plane = [plane for plane in GE.planes if plane.id == event.plane_id][
+                    0
+                ]  # TODO: find more efficient approach
+                plane.transmit = True
 
             elif event.type == GE.events["TELEMETRY"]:
-                ATC.update_telemetry(event.plane_id, event.telemetry)
+                GE.atc.update_telemetry(event.plane_id, event.telemetry)
 
             elif event.type == GE.events["FLIGHTPLAN"]:
                 pass
+
+            elif event.type == GE.events["HOLD"]:
+                plane = [plane for plane in GE.planes if plane.id == event.plane_id][
+                    0
+                ]  # TODO: find more efficient approach
+
+                plane.hold()
 
         GE.update() if not GE.paused else None
         GE.draw()

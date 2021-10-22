@@ -28,12 +28,16 @@ class GameEngine:
         # assets
         self.audio_volume = 0.1
         self.assets_audio_path = Path("aatc/assets/audio")
+        self.assets_images_path = Path("aatc/assets/images")
         self.user_interact_audio = Path("user_interact.wav")
         self.plane_spawn_audio = Path("plane_spawn.wav")
         self.plane_land_audio = Path("plane_land.wav")
         self.plane_crash_audio = Path("plane_crash.wav")
+        self.program_icon = Path("paper_plane.png")
 
         self.plane_protected_radius = 0.1  # km
+        self.pan_amount = 0.5
+        self.zoom_amount = 1.0
 
         # UI
         self.draw_gizmos = True
@@ -67,6 +71,7 @@ class GameEngine:
         self.clock = pygame.time.Clock()
         self.screen = pygame.display.set_mode(self.screen_size)
         pygame.display.set_caption("AATC - David Maranto 2021")
+        pygame.display.set_icon(pygame.image.load(self.assets_images_path/self.program_icon))
 
         self.planes = []
 

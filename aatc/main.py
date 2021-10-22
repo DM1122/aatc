@@ -63,6 +63,31 @@ if __name__ == "__main__":
                     LOG.info(f"Nearest open runway: {runway_id}")
                     GE.play_audio(GE.user_interact_audio)
 
+                elif event.key == pygame.K_UP:  # pan up
+                    LOG.debug(f"Panning up")
+                    GE.origin[1] += GE.pan_amount*GE.screen_scale
+
+                elif event.key == pygame.K_DOWN:  # pan down
+                    LOG.debug(f"Panning down")
+                    GE.origin[1] -= GE.pan_amount*GE.screen_scale
+
+                elif event.key == pygame.K_LEFT:  # pan left
+                    LOG.debug(f"Panning left")
+                    GE.origin[0] += GE.pan_amount*GE.screen_scale
+
+                elif event.key == pygame.K_RIGHT:  # pan right
+                    LOG.debug(f"Panning right")
+                    GE.origin[0] -= GE.pan_amount*GE.screen_scale                                                                      
+
+                elif event.key == pygame.K_KP_PLUS:  # zoom in
+                    LOG.debug(f"Incrementing zoom")
+                    GE.screen_scale += GE.zoom_amount
+
+                elif event.key == pygame.K_KP_MINUS:  # zoom out
+                    LOG.debug(f"Decrementing zoom")
+                    GE.screen_scale -= GE.zoom_amount
+                
+
             elif event.type == GE.events["CONNECTIONREQUEST"]:
                 GE.atc.add_plane(event.plane_id)
 

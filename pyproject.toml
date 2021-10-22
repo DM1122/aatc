@@ -18,6 +18,7 @@ pylint-runner = "^0.6.0"
 pytest = "^6.2.5"
 pytest-cov = "^3.0.0"
 pytest-html = "^3.1.1"
+auto-py-to-exe = "^2.10.1"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

@@ -1,3 +1,4 @@
+"""Module for the game engine class."""
 # stdlib
 import logging
 import math
@@ -16,46 +17,62 @@ LOG = logging.getLogger(__name__)
 
 
 class GameEngine:
-    def __init__(self, screen_size=(500, 500)):
-        # region game config
-        # screen
-        self.screen_fps = 60
-        self.screen_color = (0, 0, 0)
-        self.screen_scale = 25  # pixels per km
-        self.screen_size = Vector2(screen_size)
-        self.paused = False
+    """Responsible for handling logic, user interaction, and rendering of the
+        simulation.
 
-        # assets
-        self.audio_volume = 0.1
-        self.assets_audio_path = Path("aatc/assets/audio")
-        self.assets_images_path = Path("aatc/assets/images")
-        self.user_interact_audio = Path("user_interact.wav")
-        self.plane_spawn_audio = Path("plane_spawn.wav")
-        self.plane_land_audio = Path("plane_land.wav")
-        self.plane_crash_audio = Path("plane_crash.wav")
+    Args:
+        screen_size (tuple, optional): Screen width and height in pixels to render.
+            Defaults to (500, 500).
+    """
+
+    def __init__(self, screen_size=(500, 500)):
+        # region config
+        # screen
+        self.screen_color = (0, 0, 0)  # rgb
+        self.screen_fps = 60  # cap
+        self.screen_scale = 25  # pixels per km
+
+        self.screen_size = Vector2(screen_size)
+
+        # program
         self.program_icon = Path("paper_plane.png")
 
-        self.plane_protected_radius = 0.1  # km
+        # images
+        self.assets_images_path = Path("aatc/assets/images")
+
+        # audio
+        self.audio_volume = 0.1
+        self.assets_audio_path = Path("aatc/assets/audio")
+        self.plane_crash_audio = Path("plane_crash.wav")
+        self.plane_land_audio = Path("plane_land.wav")
+        self.plane_spawn_audio = Path("plane_spawn.wav")
+        self.user_interact_audio = Path("user_interact.wav")
+
+        # camera
         self.pan_amount = 0.5
         self.zoom_amount = 1.0
 
-        # UI
+        # simulation
+        self.paused = False
+
+        # GUI
         self.draw_gizmos = True
 
         # world
         self.origin = self.screen_size // 2
 
         # planes
+        self.plane_protected_radius = 0.1  # km
         self.spawn_planes = True
-        self.spawn_planes_interval = 0
         self.spawn_planes_interval_avg = 15  # avg sec per plane
         self.spawn_planes_interval_max = 30  # sec
         self.spawn_planes_interval_min = 1  # sec
-        self.spawn_planes_time_prev = 0  # msec
 
+        self._spawn_planes_interval = 0  # sec
+        self._spawn_planes_time_prev = 0  # msec
         # endregion
 
-        # events
+        # event definiton
         self.events = {
             "CONNECTIONREQUEST": pygame.event.custom_type(),
             "CONNECTIONCONFIRMATION": pygame.event.custom_type(),
@@ -67,42 +84,54 @@ class GameEngine:
         # region setup
         self.RNG = np.random.default_rng()
 
+        # initalize pygame
         pygame.init()
         self.clock = pygame.time.Clock()
         self.screen = pygame.display.set_mode(self.screen_size)
         pygame.display.set_caption("AATC - David Maranto 2021")
-        pygame.display.set_icon(pygame.image.load(self.assets_images_path/self.program_icon))
+        pygame.display.set_icon(
+            pygame.image.load(self.assets_images_path / self.program_icon)
+        )
 
+        # instantiate game objects
         self.planes = []
 
         self.runways = [
             Runway(
-                id=0, entry_coord=Vector2(-0.5, -0.5), exit_coord=Vector2(-0.5, 0.5)
+                runway_id="A",
+                entry_coord=Vector2(-0.5, -0.5),
+                exit_coord=Vector2(-0.5, 0.5),
             ),
-            Runway(id=1, entry_coord=Vector2(0.5, -0.5), exit_coord=Vector2(0.5, 0.5)),
+            Runway(
+                runway_id="B",
+                entry_coord=Vector2(0.5, -0.5),
+                exit_coord=Vector2(0.5, 0.5),
+            ),
         ]
 
-        # instantiating game objects
         self.atc_zone = ATCZone()
-        self.atc = controller.AATC(channels=self.events, runways=self.runways)
 
+        self.atc = controller.AATC(channels=self.events, runways=self.runways)
         # endregion
 
     def spawn_plane(self):
-        id = self.generate_id()
+        """Spawns a plane at a random position along the air traffic control zone
+        ring."""
+        plane_id = self.generate_id()
         spawn_angle = self.RNG.random(1) * 2 * math.pi  # random angle in radians
         spawn_position = (
             Vector2(math.cos(spawn_angle), math.sin(spawn_angle)) * self.atc_zone.radius
         )
         spawn_heading = math.degrees(
             math.pi - math.atan2(spawn_position.x, spawn_position.y)
-        )
+        )  # set the plane's initial heading to the center of the ATC zone
         LOG.info(
-            f"Spawning plane '{id}' at {spawn_position} with heading {round(spawn_heading)}°"
+            f"Spawning plane '{plane_id}' at {spawn_position} with heading "
+            f"{round(spawn_heading)}°"
         )
         self.planes.append(
             Plane(
-                id=id,
+                plane_id=plane_id,
                 position=spawn_position,
                 heading=spawn_heading,
                 channels=self.events,
@@ -120,48 +149,78 @@ class GameEngine:
         Returns:
             pygame.math.Vector2D: The vector represented in screen coordinates.
         """
-        v = Vector2(vector) if type(vector) is not Vector2 else vector
+        v = Vector2(vector) if not isinstance(vector, Vector2) else vector
         v = Vector2(v.x * -1, v.y) * self.screen_scale
         v_screen = self.origin - v
 
         return v_screen
 
     def play_audio(self, audio):
+        """Plays an audio file.
+
+        Args:
+            audio (pathlib.Path): Name of the audio file to play.
+        """
         sound = pygame.mixer.Sound(str(self.assets_audio_path / audio))
         sound.set_volume(self.audio_volume)
         sound.play()
 
+    def _get_spawn_interval(self):
+        spawn_interval = self.RNG.normal(
+            loc=self.spawn_planes_interval_avg, scale=2.0
+        )  # sample random interval time from normal distribution
+        spawn_interval = round(
+            np.clip(
+                a=spawn_interval,
+                a_min=self.spawn_planes_interval_min,
+                a_max=self.spawn_planes_interval_max,
+            )
+        )
+
+        return spawn_interval
+
+    @staticmethod
+    def generate_id(size=6, chars=string.ascii_uppercase + string.digits):
+        """Generates a random string of given size and characters. Used to generate
+            unique plane IDs.
+
+        Args:
+            size (int, optional): Number of elemnents in ID. Defaults to 6.
+            chars (list(str), optional): Characters to include in ID. Defaults to
+                string.ascii_uppercase+string.digits.
+
+        Returns:
+            str: An ID.
+
+        TODO: Ensure unique IDs
+        """
+        return "".join(random.choice(chars) for _ in range(size))
+
     def update(self):
+        """Executes the per-frame logic of the simulation."""
         time = pygame.time.get_ticks()
 
         # spawn plane
         if (
-            self.spawn_planes == True
-            and time >= self.spawn_planes_time_prev + self.spawn_planes_interval * 1000
+            self.spawn_planes is True
+            and time
+            >= self._spawn_planes_time_prev + self._spawn_planes_interval * 1000
         ):
             self.spawn_plane()
-            self.spawn_planes_time_prev = time
+            self._spawn_planes_time_prev = time
 
-            self.spawn_planes_interval = round(
-                np.clip(
-                    a=self.RNG.normal(loc=self.spawn_planes_interval_avg, scale=2.0),
-                    a_min=self.spawn_planes_interval_min,
-                    a_max=self.spawn_planes_interval_max,
-                )
-            )
-            LOG.debug(f"Spawning next plane in {self.spawn_planes_interval}s")
+            self._spawn_planes_interval = self._get_spawn_interval()
+            LOG.debug(f"Spawning next plane in {self._spawn_planes_interval}s")
 
+        # update planes
         for plane in self.planes:
-            plane.position += plane.get_velocity() * (self.clock.get_time() * 10 ** -3)
+            plane.position += plane.get_velocity() * (
+                self.clock.get_time() * 10 ** -3
+            )  # apply physics
             plane.update()
 
-        # self.atc.update()
-
-    @staticmethod
-    def generate_id(size=6, chars=string.ascii_uppercase + string.digits):
-        return "".join(random.choice(chars) for _ in range(size))
-
     def draw(self):
+        """Draw gameobjects and other graphical elements to the scene."""
         self.screen.fill(self.screen_color)
 
         self.atc_zone.draw(
@@ -176,9 +235,7 @@ class GameEngine:
                 position=self.vector_to_screen(plane.position),
                 scale=self.screen_scale,
             )
-            if self.draw_gizmos:
-                LOG.debug(f"plane pos: {plane.position}")
-                LOG.debug(f"screen pos {self.vector_to_screen(plane.position)}")
+            if self.draw_gizmos:  # draw the plane's protected radius
                 pygame.draw.circle(
                     surface=self.screen,
                     color=(0, 0, 255),
@@ -195,8 +252,8 @@ class GameEngine:
             )
 
         if self.draw_gizmos:
-            # draw path gizmos
-            for path in self.atc.paths:
+
+            for path in self.atc.paths:  # draw path lines
                 waypoints_tranformed = [
                     self.vector_to_screen(waypoint) for waypoint in path.waypoints
                 ]

@@ -1,11 +1,8 @@
 """Tests for game object functionality."""
 # stdlib
 import logging
-import math
 
 # external
-import numpy as np
-import pygame
 from pygame.math import Vector2
 
 # project

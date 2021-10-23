@@ -14,8 +14,17 @@ An Automated Air Traffic Controller Implementation
 
 
 # Usage
-To playtest the simulator, run the following.
+To playtest the simulator, install the repo as a package:
 pip install git+https://github.com/DM1122/aatc
+
+In a new `.py` file, import the package and call the main function:
+```
+import aatc
+
+aatc.main.run()
+```
+
+TODO: convert simulator to executable
 
 In a new python file, 
 

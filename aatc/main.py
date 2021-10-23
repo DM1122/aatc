@@ -5,8 +5,10 @@ import sys
 from pathlib import Path
 
 # external
-import game
 import pygame
+
+# project
+from aatc import game
 
 # region log config
 log_path = Path("logs/main")

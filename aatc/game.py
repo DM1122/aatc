@@ -7,11 +7,13 @@ import string
 from pathlib import Path
 
 # external
-import controller
 import numpy as np
 import pygame
-from game_objects import ATCZone, Plane, Runway
 from pygame.math import Vector2
+
+# project
+from aatc import controller
+from aatc.game_objects import ATCZone, Plane, Runway
 
 LOG = logging.getLogger(__name__)
 

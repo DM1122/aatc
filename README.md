@@ -12,6 +12,7 @@
 # AATC
 An Automated Air Traffic Controller Implementation
 
+<img src="img/program-window.png" height="300">
 
 # Usage
 To playtest the simulator, install the repo as a package:

@@ -1,7 +1,7 @@
 [![Python Version](https://img.shields.io/badge/python-3.7-blue.svg)](https://www.python.org/downloads/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Pre-Commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://pre-commit.com/)
-[![GitHub repo size](https://img.shields.io/github/repo-size/DM1122/fpcnn)](https://github.com/DM1122/aatc)
+[![GitHub repo size](https://img.shields.io/github/repo-size/DM1122/aatc)](https://github.com/DM1122/aatc)
 [![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/DM1122/aatc)](https://github.com/DM1122/aatc)
 ![Lines of code](https://img.shields.io/tokei/lines/github/DM1122/aatc)
 [![Pytest](https://github.com/DM1122/aatc/actions/workflows/pytest.yml/badge.svg)](https://github.com/DM1122/aatc/actions/workflows/pytest.yml)
@@ -26,9 +26,6 @@ aatc.main.run()
 
 TODO: convert simulator to executable
 
-In a new python file, 
-
-
 # Contribution
 ## Setup
 This section will take you through the procedure to configure your development environment. At a glance:
@@ -52,7 +49,7 @@ The repo employs [poetry](https://python-poetry.org/) <img src="img/poetry-logo.
 Clone the repo using [Github Desktop](https://desktop.github.com/) <img src="img/github-desktop-logo.png" height="16"/> or the commandline via:
 
 ```
-git clone https://github.com/DM1122/fpcnn.git
+git clone https://github.com/DM1122/aatc.git
 ```
 
 From within the cloned repo, run poetry's install command to install all the dependencies in one go:

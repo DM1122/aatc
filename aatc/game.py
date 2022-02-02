@@ -64,9 +64,9 @@ class GameEngine:
         self.origin = self.screen_size // 2
 
         # planes
-        self.plane_protected_radius = 0.1  # km
+        self.plane_protected_radius = 0.5  # km
         self.spawn_planes = True
-        self.spawn_planes_interval_avg = 15  # avg sec per plane
+        self.spawn_planes_interval_avg = 5  # avg sec per plane
         self.spawn_planes_interval_max = 30  # sec
         self.spawn_planes_interval_min = 1  # sec
 

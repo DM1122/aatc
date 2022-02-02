@@ -5,6 +5,7 @@ from collections import deque
 from pprint import pformat
 
 # external
+from aatc.game_objects import Path
 import pygame
 
 LOG = logging.getLogger(__name__)
@@ -24,11 +25,13 @@ class AATC:
         self.planes = {}
         self.queue = deque()  # plane queue
         self.runways = self._build_runway_dict(runways)
-        self.paths = []  # list of active paths
+        self.paths = [Path([(-5,-5),(-2,-4),(0.5,-0.5)])]  # list of active paths
 
     def __str__(self):
-        return f"""AATC Info:\nActive connections:\t{len(self.planes)}\nPlanes:\n
-        {pformat(self.planes)}\nQueue: {self.queue}"""
+        string = (f"AATC Info:\nActive connections:\t{len(self.planes)}\nPlanes:\n"
+        f"{pformat(self.planes)}\nQueue: {self.queue}")
+        return string
+        
 
     @staticmethod
     def _build_runway_dict(runways):
